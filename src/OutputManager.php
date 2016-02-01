@@ -19,6 +19,30 @@ use Wsdl2PhpGenerator\PhpSource\PhpFunction;
  */
 class OutputManager
 {
+    protected $archiveMode = true;
+
+    public function enableArchiveMode($archiveName)
+    {   
+        if ($this->archiveMode) {
+            return;
+        }
+
+        $this->archive = new ZipArchive();
+
+        if ($this->archive->open($archiveName, ZipArchive::CREATE) !== true) {
+            exit("Impossible d'ouvrir le fichier <$archiveName>\n");
+        }
+    }
+
+    public function closeArchiveMode($archiveName)
+    {
+        if ( ! $this->archiveMode) {
+            return;
+        }
+
+        $this->archive->close();  
+    }
+
     /**
      * @var string The directory to save the files
      */
@@ -46,12 +70,20 @@ class OutputManager
      */
     public function save(PhpClass $service, array $types)
     {
+        $zip = new \ZipArchive();
+
+        if ($zip->open('/tmp/generated.zip', \ZipArchive::CREATE) !== true) {
+            exit("Impossible d'ouvrir le fichier <$filename>\n");
+        }
+
         $this->setOutputDirectory();
 
-        $this->saveClassToFile($service);
+        $this->saveClassToFile($service, $zip);
         foreach ($types as $type) {
-            $this->saveClassToFile($type);
+            $this->saveClassToFile($type, $zip);
         }
+
+        $zip->close();
 
         $classes = array_merge(array($service), $types);
         $this->saveAutoloader($service->getIdentifier(), $classes);
@@ -83,18 +115,24 @@ class OutputManager
      *
      * @param PhpClass $class
      */
-    private function saveClassToFile(PhpClass $class)
+    private function saveClassToFile(PhpClass $class, $zip = null)
     {
         if ($this->isValidClass($class)) {
-            $file = new PhpFile($class->getIdentifier());
+
+            $file = new PhpFile($filename = $class->getIdentifier() . '.php');
 
             $namespace = $this->config->get('namespaceName');
-            if (!empty($namespace)) {
+
+            if ( ! empty($namespace)) {
                 $file->addNamespace($namespace);
             }
 
             $file->addClass($class);
-            $file->save($this->dir);
+            
+            $zip->addFromString(
+                $filename, 
+                $file->getSource()
+            );  
         }
     }
 
